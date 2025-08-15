@@ -30,7 +30,7 @@ const INTERNAL_SETTINGS = {
     DEFAULT_LS_PORT: 34172,
 };
 
-// --- Added: allow overriding endpoints via URL query or saved value ---
+// --- Allow overriding endpoints via URL query or saved value ---
 try {
     const qp = new URLSearchParams(window.location.search);
     const GS_Q = qp.get("gs");
@@ -155,4 +155,13 @@ export const SETTINGS = {
     setAccessToken: (token) => {
         localStorage.setItem("accessToken", token);
     },
+};
+
+/**
+ * Maps the game version enum from the backend to the corresponding board.
+ */
+export const GAME_VERSION_TO_BOARD = {
+    "BASE_ORIENT": "gameboard",
+    "BASE_ORIENT_CITIES": "gameboard-cities",
+    "BASE_ORIENT_TRADE_ROUTES": "gameboard-tradingposts"
 };

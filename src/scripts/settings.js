@@ -30,6 +30,34 @@ const INTERNAL_SETTINGS = {
     DEFAULT_LS_PORT: 34172,
 };
 
+// --- Added: allow overriding endpoints via URL query or saved value ---
+try {
+    const qp = new URLSearchParams(window.location.search);
+    const GS_Q = qp.get("gs");
+    const LS_Q = qp.get("ls");
+
+    if (GS_Q) {
+        INTERNAL_SETTINGS.GS_API = GS_Q;
+        try { localStorage.setItem("GS_API", GS_Q); } catch {}
+    }
+    if (LS_Q) {
+        INTERNAL_SETTINGS.LS_API = LS_Q;
+        try { localStorage.setItem("LS_API", LS_Q); } catch {}
+    }
+
+    if (!INTERNAL_SETTINGS.GS_API) {
+        const savedGS = localStorage.getItem("GS_API");
+        if (savedGS) INTERNAL_SETTINGS.GS_API = savedGS;
+    }
+    if (!INTERNAL_SETTINGS.LS_API) {
+        const savedLS = localStorage.getItem("LS_API");
+        if (savedLS) INTERNAL_SETTINGS.LS_API = savedLS;
+    }
+} catch (e) {
+    // ignore
+}
+// --- End added ---
+
 /**
  * Define the settings.
  */
@@ -43,7 +71,10 @@ export const SETTINGS = {
      */
     setGS_API: (gs) => {
         try {
-            checkEndpoint(gs).then(() => INTERNAL_SETTINGS.GS_API = gs);
+            checkEndpoint(gs).then(() => { 
+                INTERNAL_SETTINGS.GS_API = gs; 
+                try { localStorage.setItem("GS_API", gs); } catch {}
+            });
         } catch(err) {
             window.alert("Could not set GS Endpoint: " + err);
         }
@@ -70,7 +101,10 @@ export const SETTINGS = {
      */
     setLS_API: (ls) => {
         try {
-            checkEndpoint(ls).then(() => INTERNAL_SETTINGS.LS_API = ls);
+            checkEndpoint(ls).then(() => { 
+                INTERNAL_SETTINGS.LS_API = ls; 
+                try { localStorage.setItem("LS_API", ls); } catch {}
+            });
         } catch(err) {
             window.alert("Could not set LS Endpoint: " + err);
         }
@@ -82,7 +116,6 @@ export const SETTINGS = {
      * @returns location origin of LS
      */
     getLS_API: () => {
-        // if custom set, return that
         if(INTERNAL_SETTINGS.LS_API !== "") {
             return INTERNAL_SETTINGS.LS_API;
         }
@@ -91,13 +124,27 @@ export const SETTINGS = {
     },
 
     /**
+     * Getter for Internal Settings
+     * 
+     * @returns readonly value of the internal settings
+     */
+    get settings() {
+        return INTERNAL_SETTINGS;
+    },
+
+    /**
+     * Set the internal settings.
+     * @param {string} val 
+     */
+    set settings(val) {
+        // internal settings shouldn't be exposed
+    },
+
+    /**
      * Get the access token stored in local storage
      * @returns string | null
      */
     getAccessToken: () => {
-        // can add check here to ensure that there's an access token
-        // if not, can boot client to login screen if expired or just not theree
-
         return localStorage.getItem("accessToken");
     },
 
@@ -108,145 +155,4 @@ export const SETTINGS = {
     setAccessToken: (token) => {
         localStorage.setItem("accessToken", token);
     },
-
-    /**
-     * Get the refresh token stored in local storage
-     * @returns string | null
-     */
-    getRefreshToken: () => {
-        return localStorage.getItem("refreshToken");
-    },
-
-    /**
-     * Store the refresh token in local storage
-     * @param {string} token 
-     */
-    setRefreshToken: (token) => {
-        localStorage.setItem("refreshToken", token);
-    },
-
-    /**
-     * Get the username stored in local storage
-     * @returns string | null
-     */
-    getUsername: () => {
-        return localStorage.getItem("username");
-    },
-    
-    /**
-     * Store the username in local storage
-     * @param {string} setUsername 
-     */
-    setUsername: (username) => {
-        localStorage.setItem("username", username);
-    },
-
-    /**
-     * Get the username of the currently stored token.
-     * @returns string | null
-     */
-    fetchUsername: async () => {
-        // build url
-        const url = new URL(`${SETTINGS.getLS_API()}/oauth/username`);
-        url.search = new URLSearchParams({ "access_token": SETTINGS.getAccessToken() }).toString();
-
-        const resp = await fetch(url, { method: "GET" });
-
-        if(!resp.ok) {
-            return null;
-        }
-
-        const rTest = await resp.text();
-
-        return rTest;
-    },
-
-    /**
-     * Attempt to refresh access token with refresh token.
-     * @returns string | null - returns access token
-     */
-    refreshAccessToken: async () => {
-        const rt = SETTINGS.getRefreshToken();
-
-        // nothing stored
-        if(!rt) {
-            return null;
-        }
-
-        const params = {
-            "grant_type": "refresh_token",
-            "refresh_token": rt
-        };
-        const url = new URL(`${SETTINGS.getLS_API()}/oauth/token`);
-        url.search = new URLSearchParams(params).toString();
-
-        const headers = new Headers();
-        headers.set("Authorization", `Basic ${btoa("bgp-client-name:bgp-client-pw")}`);
-
-        var newAT = "";
-        try {
-            const resp = await fetch(url, { method: "POST", headers: headers });
-
-            if(!resp.ok) throw new Error("not ok: " + resp.statusText);
-
-            const data = await resp.json();
-
-            SETTINGS.setAccessToken(data.access_token);
-            SETTINGS.setRefreshToken(data.refresh_token);
-            newAT = data.access_token;
-
-        } catch(e) {
-            return null;
-        }
-
-        return newAT;
-    },
-
-    /**
-     * Force client to go to login screen.
-     */
-    goToLogin: () => {
-        window.location.pathname = "/login/";
-    },
-
-    /**
-     * Verify that the user is logged in.
-     * Will attempt to refresh token if available.
-     * Will boot user to login screen if not.
-     */
-    verifyCredentials: async () => {
-        // no token
-        try {
-            const username = await SETTINGS.fetchUsername();
-            if(!username && !(await SETTINGS.refreshAccessToken())) {
-                SETTINGS.goToLogin();
-                return;
-            }
-        } catch(err) {
-            SETTINGS.goToLogin();
-            return;
-        }
-
-        // now set username again
-        const username = await SETTINGS.fetchUsername();
-        SETTINGS.setUsername(username);
-    },
-
-    /**
-     * Removes all saved tokens and credentials.
-     */
-    logout: () => {
-        localStorage.removeItem("username");
-        localStorage.removeItem("refreshToken");
-        localStorage.removeItem("accessToken");
-    },
-};
-
-/**
- * Maps the game version enum from the backend to the corresponding board.
- */
-export const GAME_VERSION_TO_BOARD = {
-    "BASE_ORIENT": "gameboard",
-    "BASE_ORIENT_CITIES": "gameboard-cities",
-    "BASE_ORIENT_TRADE_ROUTES": "gameboard-tradingposts"
 };
